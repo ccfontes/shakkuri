@@ -52,18 +52,32 @@
        (merge (if id {:id id}))
        (merge-with #(if %1 (str %1 " " %2) %2) (if class {:class class}))))
 
-(defn normalize-element
+(defn normalize-plain-element
   "Ensure an element vector is of the form [tag-name attrs content]."
   [[tag & content]]
   (when (not (or (keyword? tag) (symbol? tag) (string? tag)))
     (throw (IllegalArgumentException. (str tag " is not a valid element name."))))
   (let [[_ tag id class] (re-matches re-tag (as-str tag))
-        tag-attrs        {:id id
-                          :class (if class (.replace ^String class "." " "))}
+        class (if class (.replace ^String class "." " "))
+        tag-attrs (if id {:id id} {})
+        tag-attrs (if class
+                    (assoc tag-attrs :class class)
+                    tag-attrs)
         map-attrs        (first content)]
     (if (map? map-attrs)
       [tag (merge-attributes tag-attrs map-attrs) (next content)]
       [tag tag-attrs content])))
+
+(defmulti expand-tag first :default ::expand-tag-default)
+
+;; the default
+(defmethod expand-tag ::expand-tag-default [_] nil)
+
+(defn normalize-element [element]
+  (let [normalized-element (normalize-plain-element element)]
+    (if-let [expanded-elem (expand-tag normalized-element)]
+      (recur expanded-elem)
+      normalized-element)))
 
 (defprotocol HtmlRenderer
   (render-html [this]
